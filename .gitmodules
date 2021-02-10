@@ -1,0 +1,3 @@
+[submodule "job-processor/Quantum-Circuit-Multiplexers"]
+	path = job-processor/Quantum-Circuit-Multiplexers
+	url = https://github.com/ahirthucla/Quantum-Circuit-Multiplexers/
