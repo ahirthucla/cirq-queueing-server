@@ -9,6 +9,9 @@ client = datastore.Client()
 # Initialize flask
 app = Flask(__name__)
 
+# available fields and their defaults. None if the field is required
+fields = {'qasm':None, 'email':None, 'repetitions':None, 'student_id':None, 'note':'Your Note Here', 'method':'csim'}
+
 def store_job(data: Dict[str,str], client: datastore.Client) -> int:
     """ Stores job datastore 
     Args: 
@@ -23,12 +26,11 @@ def store_job(data: Dict[str,str], client: datastore.Client) -> int:
     entity = datastore.Entity(key=key)
 
     # fill entity fields
-    for field in ['qasm', 'email', 'repetitions', 'student_id']:
-        entity[field] = str(data[field])
+    for field, default in fields.items():
+        value = data.get(field)
+        entity[field] = value if value else default
 
-    entity['method'] = str(data['method']) if 'method' in data else 'csim'
     entity['submission_timestamp'] = datetime.datetime.utcnow()
-
     entity['verified'] = False
     entity['done'] = False
 
@@ -114,11 +116,15 @@ def send() -> str:
         string response message
     """
 
+    failure_string = 'Please POST a json object containing the following fields:\n' + \
+                    ', '.join(str(field) + ('(optional)' if default else '') for field,default in fields.items())
+
     # check that request is of type POST and has a json attached
     if request.method == 'POST' and request.json:
         # check that json has required fields
-        if any((x not in request.json for x in ['qasm', 'email', 'repetitions', 'student_id'])): 
-            return "Request JSON should contain 'qasm', 'email', 'repetitions', and 'student_id' fields"
+        required_fields = {field for field,default in fields.items() if not default}
+        if any(x not in request.json for x in required_fields):
+            return failure_string
 
         # store job from json
         job_id = store_job(request.json, client).id
@@ -126,7 +132,7 @@ def send() -> str:
         # return job id
         return "Job Stored with ID: " + str(job_id)
     else: 
-        return "Please POST a json object containing 'qasm', 'email', 'repetitions', 'student_id' and 'method'(optional) fields"
+        return failure_string
 
 @app.route('/')
 def root() -> str:
