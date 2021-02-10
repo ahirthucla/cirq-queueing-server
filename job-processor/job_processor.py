@@ -5,6 +5,7 @@ from cirq.contrib.qasm_import import circuit_from_qasm, QasmException
 from flask import Flask
 import time
 import cirq.google as cg
+import sys
 
 if TYPE_CHECKING: 
     from google.cloud.datastore import Entity
@@ -15,9 +16,8 @@ client = datastore.Client()
 # Initialize flask
 app = Flask(__name__)
 
-# Pull name of real quantum processor from file
-with open('../processor_id.txt', 'r') as f:
-    processor_id = f.readline().strip()
+# processor id from argument
+processor_id = str(sys.argv[1])
 
 # Initialize google cloud quantum engine
 engine = cirq.google.Engine(project_id=client.project)
@@ -29,6 +29,9 @@ real_handler = engine.sampler(processor_id=processor_id, gate_set=cg.SYC_GATESET
 # Map 'method' strings to handlers
 handlers = {'csim':cirq.Simulator(), 'qsim':qsim_handler, 'real': real_handler}
 
+#TODO multiplexing job circuits, demultiplexing the results, storing in each job
+
+#def run_job(entity: 'Entity', handlers: whatever) -> 'Entity':
 def run_job(entity: 'Entity') -> 'Entity':
     """ Run job on one of available handlers and update entity
     Arg: 
@@ -76,11 +79,14 @@ def run_job(entity: 'Entity') -> 'Entity':
     return entity
 
 @app.route('/run')
+#def run(client: datastore.Client) -> str:
 def run() -> str:
     """ pull unfinished, verified jobs and run them
     Returns: 
         string message with number of jobs run
     """
+
+    # tentatively create handlers in here if this isn't going to be a server.
 
     # pull unfinished, verified job keys
     query = client.query(kind="job")
@@ -93,6 +99,7 @@ def run() -> str:
     for key in keys:
         with client.transaction():
             entity = client.get(key.key)
+            #entity = run_job(entity, handlers)
             entity = run_job(entity)
             client.put(entity)
 
@@ -100,5 +107,7 @@ def run() -> str:
     return 'Jobs run: '+str(len(keys))
 
 if __name__ == '__main__':
+    # tentatively initialize client here
+
     # run as local server for testing
     app.run(host='127.0.0.1', port=8080, debug=True)

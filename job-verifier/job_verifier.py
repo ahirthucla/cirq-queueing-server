@@ -27,8 +27,7 @@ def verify_job(entity: 'Entity', max_qubits: int = 16, max_ops: int = 120, max_r
     # ensure only correct jobs are being pulled
     assert not entity['done'] and not entity['verified']
 
-    # entity will not need to be checked again
-    entity['done'] = True
+    # record verification timestamp
     entity['verified_timestamp'] = datetime.datetime.utcnow()
 
     # parse circuit from qasm, checking for illegal qasm circuit
@@ -70,7 +69,7 @@ def verify_job(entity: 'Entity', max_qubits: int = 16, max_ops: int = 120, max_r
     print(circuit)
     res = None
     while res not in {'y', 'n'}:
-        res = input("y to accept, n to deny")
+        res = input("y to accept, n to deny: ")
     if res == 'n':
         entity['verified'] = False
         entity['message'] = 'Your circuit was manually denied by the verifier'
