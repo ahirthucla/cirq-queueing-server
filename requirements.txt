@@ -1,0 +1,5 @@
+-e job_processor/quantum_circuit_multiplexers
+--pre cirq
+flask
+google-cloud-datastore
+ply

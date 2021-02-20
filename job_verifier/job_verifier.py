@@ -65,17 +65,6 @@ def verify_job(entity: 'Entity', max_qubits: int = 16, max_ops: int = 120, max_r
         entity['message'] = message
         return entity
 
-    # manually check remaining circuits
-    print(circuit)
-    res = None
-    while res not in {'y', 'n'}:
-        res = input("y to accept, n to deny: ")
-    if res == 'n':
-        entity['verified'] = False
-        entity['message'] = 'Your circuit was manually denied by the verifier'
-        return entity
-    assert res == 'y'
-
     # update and return valid circuit
     entity['verified'] = True
     entity['message'] = 'Validated'

@@ -3,8 +3,9 @@ import cirq
 from flask import Flask
 import time
 import sys
+import datetime
 from cirq.contrib.qasm_import import circuit_from_qasm, QasmException
-from quantum_circuit_multiplexers.multiplex import multiplex_onto_sycamore, get_error_qubits
+from cirq_multiplexer.multiplex import multiplex_onto_sycamore, get_error_qubits
 
 # Connect to datastore
 client = datastore.Client()
@@ -65,6 +66,7 @@ def run_job(entity: 'datastore.Entity', engine) -> 'datastore.Entity':
     # update and return entity
     entity['results'] = str(result)
     entity['time'] = elapsed
+    entity['processed_timestamp'] = datetime.datetime.utcnow()
     return entity
 
 @app.route('/run')

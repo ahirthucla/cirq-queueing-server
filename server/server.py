@@ -10,7 +10,7 @@ client = datastore.Client()
 app = Flask(__name__)
 
 # available fields and their defaults. None if the field is required
-fields = {'qasm':None, 'email':None, 'repetitions':None, 'student_id':None, 'note':'Your Note Here', 'method':'csim'}
+fields = {'qasm':None, 'email':None, 'repetitions':None, 'student_id':None, 'note':'Your Note Here'}
 
 def store_job(data: Dict[str,str], client: datastore.Client) -> int:
     """ Stores job datastore 
@@ -74,7 +74,7 @@ def fetch_by_student(student_ids: Iterable[int], client: datastore.Client) -> Di
     for student_id in student_ids:
         # build query
         query = client.query(kind="job")
-        query.add_filter("student_id", "=", student_id)
+        query.add_filter("student_id", "=", int(student_id))
         # query for entities
         entities = query.fetch()
         results[student_id] = {entity.id: dict(entity.items()) for entity in entities}
@@ -97,12 +97,18 @@ def lookup() -> Dict[int, Dict]:
 
         response = {}
         # yield jobs by job id
-        if 'job_id' in request.args: 
-            response['Jobs by job_id'] = fetch_by_job(request.args.getlist('job_id'), client)
+        try: 
+            if 'job_id' in request.args: 
+                response['Jobs by job_id'] = fetch_by_job(request.args.getlist('job_id'), client)
+        except Exception as e:
+            return "Exception:" + str(e)
 
         # yield jobs by student id
-        if 'student_id' in request.args:
-            response['Jobs by student_id'] = fetch_by_student(request.args.getlist('student_id'), client)
+        try:
+            if 'student_id' in request.args:
+                response['Jobs by student_id'] = fetch_by_student(request.args.getlist('student_id'), client)
+        except Exception as e:
+            return "Exception:" + str(e)
 
         return response
 
