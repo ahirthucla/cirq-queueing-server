@@ -1,3 +1,3 @@
-[submodule "job_processor/quantum_circuit_multiplexers"]
+[submodule "quantum_circuit_multiplexers"]
 	path = quantum_circuit_multiplexers
 	url = https://github.com/ahirthucla/quantum_circuit_multiplexers
