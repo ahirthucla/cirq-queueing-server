@@ -2,6 +2,8 @@ from typing import Dict, Iterable, Union
 from flask import Flask, request
 from google.cloud import datastore
 import datetime
+from job_processor.job_processor import run as run_jobs
+from job_verifier.job_verifier import verify_all
 
 # Connect to datastore
 client = datastore.Client()
@@ -11,6 +13,8 @@ app = Flask(__name__)
 
 # available fields and their defaults. None if the field is required
 fields = {'qasm':None, 'email':None, 'repetitions':None, 'student_id':None, 'note':'Your Note Here'}
+
+PROCESSOR_ID = 'PID'
 
 def store_job(data: Dict[str,str], client: datastore.Client) -> int:
     """ Stores job datastore 
@@ -139,6 +143,19 @@ def send() -> str:
         return "Job Stored with ID: " + str(job_id)
     else: 
         return failure_string
+
+@app.route('/verify', methods=['GET'])
+def verify():
+    print(request.headers)
+    #if not request.headers.get('HTTP_X_APPENGINE_CRON'):
+    #  return 'Not Authorized'
+    return verify_all(PROCESSOR_ID)
+
+@app.route('/run', methods=['GET'])
+def run(): 
+    #if not request.headers.get('HTTP_X_APPENGINE_CRON'):
+    #  return 'Not Authorized'
+    return run_jobs(PROCESSOR_ID)
 
 @app.route('/')
 def root() -> str:

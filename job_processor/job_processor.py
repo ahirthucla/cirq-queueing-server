@@ -5,18 +5,9 @@ import time
 import sys
 import datetime
 from cirq.contrib.qasm_import import circuit_from_qasm, QasmException
-from cirq_multiplexer.multiplex import multiplex_onto_sycamore, get_error_qubits
+from lib.cirq_multiplexer.multiplex import multiplex_onto_sycamore, get_error_qubits
 
-# Connect to datastore
-client = datastore.Client()
-
-# Initialize flask
-app = Flask(__name__)
-
-# processor id from argument
-PROCESSOR_ID = str(sys.argv[1])
-
-def run_job(entity: 'datastore.Entity', engine) -> 'datastore.Entity':
+def run_job(entity: 'datastore.Entity', handler, device, err_qubits) -> 'datastore.Entity':
     """ Run job on one of available handlers and update entity
     Arg: 
         entity: unfinished job key-able entity
@@ -39,13 +30,6 @@ def run_job(entity: 'datastore.Entity', engine) -> 'datastore.Entity':
         entity['message'] = 'Exception observed while converting QASM string to circuit:\n' + str(e) + '\n' + \
                             'With QASM string:\n' + str(entity['qasm'])
         return entity
-    
-    # get handler and device
-    handler = engine.sampler(processor_id=PROCESSOR_ID, gate_set=cirq.google.SYC_GATESET)
-    device = engine.get_processor(processor_id=PROCESSOR_ID).get_device([cirq.google.SYC_GATESET])
-
-    # get current error qubits from recent calibration
-    err_qubits = get_error_qubits(client.project, PROCESSOR_ID, 25)
 
     # conditionally map circuit
     try:
@@ -69,16 +53,25 @@ def run_job(entity: 'datastore.Entity', engine) -> 'datastore.Entity':
     entity['processed_timestamp'] = datetime.datetime.utcnow()
     return entity
 
-@app.route('/run')
 #def run(client: datastore.Client) -> str:
-def run() -> str:
+def run(processor_id) -> str:
     """ pull unfinished, verified jobs and run them
     Returns: 
         string message with number of jobs run
     """
 
+    # Connect to datastore
+    client = datastore.Client()
+
     # Initialize google cloud quantum engine
     engine = cirq.google.Engine(project_id=client.project)
+
+    # get handler and device
+    handler = engine.sampler(processor_id=processor_id, gate_set=cirq.google.SYC_GATESET)
+    device = engine.get_processor(processor_id=processor_id).get_device([cirq.google.SYC_GATESET])
+
+    # get current error qubits from recent calibration
+    err_qubits = get_error_qubits(client.project, processor_id, 25)
 
     # pull unfinished, verified job keys
     query = client.query(kind="job")
@@ -91,15 +84,14 @@ def run() -> str:
     for key in keys:
         with client.transaction():
             entity = client.get(key.key)
-            entity = run_job(entity, engine)
+            entity = run_job(entity, handler, device, err_qubits)
             client.put(entity)
 
     # return number of jobs run
     return 'Jobs run: '+str(len(keys))
 
 if __name__ == '__main__':
-    # tentatively initialize client here
-    print(run())
+    # processor id from argument
+    PROCESSOR_ID = str(sys.argv[1])
 
-    # run as local server for testing
-    #app.run(host='127.0.0.1', port=8080, debug=True)
+    print(run(PROCESSOR_ID))

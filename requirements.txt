@@ -1,5 +1,5 @@
--e job_processor/quantum_circuit_multiplexers
---pre cirq
-flask
-google-cloud-datastore
-ply
+Flask==1.1.2
+google-cloud-datastore==2.1.0
+cirq==0.10.0.dev20210219235859
+ply==3.11
+gunicorn==20.0.4

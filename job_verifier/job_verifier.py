@@ -10,9 +10,6 @@ import sys
 if TYPE_CHECKING:
     from google.cloud.datastore import Entity
 
-## Initialize google cloud quantum engine
-#engine = cg.get_engine(client.project)
-
 def verify_job(entity: 'Entity', max_qubits: int = 16, max_ops: int = 120, max_reps: int = 100) -> 'Entity':
     """ Verify that a job satisfies max count constraints, passes a manual check, and is valid for the device
     Args: 

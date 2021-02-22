@@ -1,0 +1,4 @@
+cron:
+- description: "regular verify"
+  url: /verify
+  schedule: every 5 minutes
