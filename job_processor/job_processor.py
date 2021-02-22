@@ -5,7 +5,7 @@ import time
 import sys
 import datetime
 from cirq.contrib.qasm_import import circuit_from_qasm, QasmException
-from lib.cirq_multiplexer.multiplex import multiplex_onto_sycamore, get_error_qubits
+from cirq_multiplexer.multiplex import multiplex_onto_sycamore, get_error_qubits
 
 def run_job(entity: 'datastore.Entity', handler, device, err_qubits) -> 'datastore.Entity':
     """ Run job on one of available handlers and update entity

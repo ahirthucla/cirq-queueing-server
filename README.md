@@ -1,1 +1,9 @@
 A small server, job-verifier, and job-processor for quantum programs on Google's Sycamore device, using google cloud
+
+To run locally:
+
+git clone --recurse-submodules https://github.com/ahirthucla/cirq_queueing_server
+pip install -r requirements.txt
+pip install -e quantum_circuit_multiplexers
+# change PROCESSOR_ID in server.py to the right processor id
+python server.py
