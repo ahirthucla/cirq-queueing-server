@@ -4,6 +4,7 @@ from google.cloud import datastore
 import datetime
 from job_processor.job_processor import run as run_jobs
 from job_verifier.job_verifier import verify_all
+import os
 
 # Connect to datastore
 client = datastore.Client()
@@ -27,7 +28,7 @@ def store_job(data: Dict[str,str], client: datastore.Client) -> int:
     
     # initialize entity
     key = client.key('job')
-    entity = datastore.Entity(key=key)
+    entity = datastore.Entity(key=key, exclude_from_indexes=['note', 'qasm', 'repetitions'])
 
     # fill entity fields
     for field, default in fields.items():
@@ -35,6 +36,7 @@ def store_job(data: Dict[str,str], client: datastore.Client) -> int:
         entity[field] = value if value else default
 
     entity['submission_timestamp'] = datetime.datetime.utcnow()
+    entity['submission_version'] = os.environ.get('GAE_VERSION')
     entity['verified'] = False
     entity['done'] = False
 

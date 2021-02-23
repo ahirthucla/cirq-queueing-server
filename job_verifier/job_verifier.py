@@ -6,6 +6,7 @@ import time
 import cirq.google as cg
 import datetime
 import sys
+import os
 
 if TYPE_CHECKING:
     from google.cloud.datastore import Entity
@@ -26,6 +27,8 @@ def verify_job(entity: 'Entity', max_qubits: int = 16, max_ops: int = 120, max_r
 
     # record verification timestamp
     entity['verified_timestamp'] = datetime.datetime.utcnow()
+    entity['verified_version'] = os.environ.get('GAE_VERSION')
+    entity.exclude_from_indexes.add('message')
 
     # parse circuit from qasm, checking for illegal qasm circuit
     try:
