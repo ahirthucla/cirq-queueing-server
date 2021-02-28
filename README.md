@@ -8,7 +8,7 @@ pip install -r requirements.txt
 
 pip install -e quantum_circuit_multiplexers
 
--change GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_PROCESSOR environment variables.
+- change GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_PROCESSOR environment variables.
 
 python server.py
 
@@ -16,4 +16,5 @@ python server.py
 To run on gcloud:
 
 - change GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_PROCESSOR env variables in Dockerfile
+
 gcloud app deploy server.yaml
