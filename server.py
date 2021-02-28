@@ -5,6 +5,7 @@ import datetime
 from job_processor.job_processor import run as run_jobs
 from job_verifier.job_verifier import verify_all
 import os
+import json
 
 # Connect to datastore
 client = datastore.Client()
@@ -13,7 +14,7 @@ client = datastore.Client()
 app = Flask(__name__)
 
 # available fields and their defaults. None if the field is required
-fields = {'qasm':None, 'email':None, 'repetitions':None, 'student_id':None, 'note':'Your Note Here'}
+fields = {'circuit':None, 'email':None, 'repetitions':None, 'student_id':None, 'note':'Your Note Here'}
 
 PROCESSOR_ID = 'PID'
 
@@ -28,7 +29,7 @@ def store_job(data: Dict[str,str], client: datastore.Client) -> int:
     
     # initialize entity
     key = client.key('job')
-    entity = datastore.Entity(key=key, exclude_from_indexes=['note', 'qasm', 'repetitions'])
+    entity = datastore.Entity(key=key, exclude_from_indexes=['note', 'circuit', 'repetitions'])
 
     # fill entity fields
     for field, default in fields.items():
@@ -63,7 +64,7 @@ def fetch_by_job(job_ids: Iterable[int], client: datastore.Client) -> Dict[int, 
     entities = client.get_multi(keys)
 
     # index entities by their identifier, turn into json-able dict, and return
-    results = {entity.id: dict(entity.items()) for entity in entities}
+    results = {entity.id: entity for entity in entities}
     return results
 
 def fetch_by_student(student_ids: Iterable[int], client: datastore.Client) -> Dict[int, Dict]:
@@ -83,7 +84,7 @@ def fetch_by_student(student_ids: Iterable[int], client: datastore.Client) -> Di
         query.add_filter("student_id", "=", int(student_id))
         # query for entities
         entities = query.fetch()
-        results[student_id] = {entity.id: dict(entity.items()) for entity in entities}
+        results[student_id] = {entity.id: entity for entity in entities}
     
     return results
 
@@ -116,7 +117,7 @@ def lookup() -> Dict[int, Dict]:
         except Exception as e:
             return "Exception:" + str(e)
 
-        return response
+        return json.dumps(response, indent=4, default=str)
 
     else: 
         return "Please GET with a 'job_id' argument field"

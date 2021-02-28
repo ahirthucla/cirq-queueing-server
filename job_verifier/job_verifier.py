@@ -1,7 +1,6 @@
 from typing import TYPE_CHECKING, cast
 from google.cloud import datastore
 import cirq
-from cirq.contrib.qasm_import import circuit_from_qasm, QasmException
 import time
 import cirq.google as cg
 import datetime
@@ -30,16 +29,17 @@ def verify_job(entity: 'Entity', max_qubits: int = 16, max_ops: int = 120, max_r
     entity['verified_version'] = os.environ.get('GAE_VERSION')
     entity.exclude_from_indexes.add('message')
 
-    # parse circuit from qasm, checking for illegal qasm circuit
+    # parse circuit from json, checking for illegal json circuit
     try:
-        circuit = circuit_from_qasm(entity['qasm'])
-    except QasmException as e:
-        message = 'Error converting QASM string to circuit:\n' +\
+        circuit = cirq.read_json(json_text=entity['circuit'])
+    except Exception as e:
+        message = 'Error converting JSON to circuit:\n' +\
                             'Exception Observed:\n'+\
                             str(e)+'\n'+\
-                            'With QASM string:\n'+\
-                            str(entity['qasm'])
+                            'With JSON'+\
+                            str(entity['circuit'])
         entity['verified'] = False
+        entity['done'] = True
         entity['message'] = message
         return entity
     
@@ -62,12 +62,13 @@ def verify_job(entity: 'Entity', max_qubits: int = 16, max_ops: int = 120, max_r
     # save error message and exit
     if message:
         entity['verified'] = False
+        entity['done'] = True
         entity['message'] = message
         return entity
 
     # update and return valid circuit
     entity['verified'] = True
-    entity['message'] = 'Validated'
+    entity['message'] = 'Verified'
     return entity
 
 def verify_all(processor_id: str) -> str:

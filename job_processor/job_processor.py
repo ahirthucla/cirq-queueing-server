@@ -4,7 +4,6 @@ from flask import Flask
 import time
 import sys
 import datetime
-from cirq.contrib.qasm_import import circuit_from_qasm, QasmException
 from cirq_multiplexer.multiplex import multiplex_onto_sycamore, get_error_qubits
 import os
 
@@ -26,10 +25,10 @@ def prepare_job(entity: 'datastore.Entity', device, err_qubits) -> 'datastore.En
     # This could be done in the verifier, and we could pickle load the circuit here
     #   but that may be limited by datastore's ability to save binary data
     try:
-        circuit = circuit_from_qasm(entity['qasm'])
-    except QasmException as e:
-        entity['message'] = 'Exception observed while converting QASM string to circuit:\n' + str(e) + '\n' + \
-                            'With QASM string:\n' + str(entity['qasm'])
+        circuit = cirq.read_json(json_text=entity['circuit'])
+    except Exception as e:
+        entity['message'] = 'Exception observed while converting JSON to circuit:\n' + str(e) + '\n' + \
+                            'With JSON:\n' + str(entity['circuit'])
         return entity, None, None
 
     # conditionally map circuit
@@ -40,7 +39,7 @@ def prepare_job(entity: 'datastore.Entity', device, err_qubits) -> 'datastore.En
         return entity, None, None
 
     entity.exclude_from_indexes.add('mapped_circuit')
-    entity['mapped_circuit'] = circuit.to_qasm()
+    entity['mapped_circuit'] = cirq.to_json(circuit)
 
     return entity, circuit, entity['repetitions']
 
@@ -90,7 +89,7 @@ def run(processor_id) -> str:
             if circuit and repetitions:
                 to_run.append((entity, circuit, repetitions))
             else:
-                complete.append((entity, circuit, repetitions))
+                complete.append(entity)
         assert len(to_run) + len(complete) == len(prepared)
 
         if to_run:

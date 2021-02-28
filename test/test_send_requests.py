@@ -14,8 +14,8 @@ circuit = cirq.Circuit(
     cirq.measure(*qubits)
     )
 print(circuit)
-print(circuit.to_qasm())
+print(cirq.to_json(circuit))
 
-print(requests.post(root + "send", json={"qasm":circuit.to_qasm(), "email":"test4", "repetitions":3, "student_id":1234, 'note':'test note'}).text)
-print(requests.post(root + "send", json={"qasm":circuit.to_qasm(), "email":"test4", "repetitions":3, "student_id":1234}).text) 
-print(requests.post(root + "send", json={"qasm":circuit.to_qasm(), "email":"test4", "repetitions":3, "student_id":1234}).text) 
+print(requests.post(root + "send", json={"circuit":cirq.to_json(circuit), "email":"test4", "repetitions":3, "student_id":1234, 'note':'test note'}).text)
+print(requests.post(root + "send", json={"circuit":cirq.to_json(circuit), "email":"test4", "repetitions":3, "student_id":1234}).text)
+print(requests.post(root + "send", json={"circuit":cirq.to_json(circuit), "email":"test4", "repetitions":3, "student_id":1234}).text)
