@@ -2,3 +2,6 @@ cron:
 - description: "regular verify"
   url: /verify
   schedule: every 5 minutes
+- description: "regular process"
+  url: /run
+  schedule: every 5 minutes

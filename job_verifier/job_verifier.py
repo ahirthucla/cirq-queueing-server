@@ -71,7 +71,7 @@ def verify_job(entity: 'Entity', max_qubits: int = 16, max_ops: int = 120, max_r
     entity['message'] = 'Verified'
     return entity
 
-def verify_all(processor_id: str) -> str:
+def verify_all(project_id:str, processor_id: str) -> str:
     """ pull unfinished, unverified jobs and verifies them
     Arg: 
         processor_id: string name of processor to verify against
@@ -80,7 +80,7 @@ def verify_all(processor_id: str) -> str:
     """
 
     # Connect to datastore
-    client = datastore.Client()
+    client = datastore.Client(project_id)
 
     # pull unfinished, unverified job keys
     query = client.query(kind="job")
@@ -101,7 +101,8 @@ def verify_all(processor_id: str) -> str:
 
 if __name__ == '__main__':
     # pull processor name from arguments
-    processor_id = str(sys.argv[1])
+    project_id = str(sys.argv[1])
+    processor_id = str(sys.argv[2])
 
     # runs verifier and prints number of jobs verified
-    print(verify_all(processor_id))
+    print(verify_all(project_id, processor_id))

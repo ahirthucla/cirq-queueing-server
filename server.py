@@ -7,16 +7,18 @@ from job_verifier.job_verifier import verify_all
 import os
 import json
 
+PROJECT_ID = os.environ['GOOGLE_CLOUD_PROJECT']
+
+PROCESSOR_ID = os.environ['GOOGLE_CLOUD_PROCESSOR']
+
 # Connect to datastore
-client = datastore.Client()
+client = datastore.Client(project=PROJECT_ID)
 
 # Initialize flask
 app = Flask(__name__)
 
 # available fields and their defaults. None if the field is required
 fields = {'circuit':None, 'email':None, 'repetitions':None, 'student_id':None, 'note':'Your Note Here'}
-
-PROCESSOR_ID = 'PID'
 
 def store_job(data: Dict[str,str], client: datastore.Client) -> int:
     """ Stores job datastore 
@@ -149,16 +151,15 @@ def send() -> str:
 
 @app.route('/verify', methods=['GET'])
 def verify():
-    print(request.headers)
-    #if not request.headers.get('HTTP_X_APPENGINE_CRON'):
-    #  return 'Not Authorized'
-    return verify_all(PROCESSOR_ID)
+    if not request.headers.get('X-Appengine-Cron'):
+      return "Not Authorized", 401
+    return verify_all(PROJECT_ID, PROCESSOR_ID)
 
 @app.route('/run', methods=['GET'])
 def run(): 
-    #if not request.headers.get('HTTP_X_APPENGINE_CRON'):
-    #  return 'Not Authorized'
-    return run_jobs(PROCESSOR_ID)
+    if not request.headers.get('X-Appengine-Cron'):
+      return "Not Authorized", 401
+    return run_jobs(PROJECT_ID, PROCESSOR_ID)
 
 @app.route('/')
 def root() -> str:

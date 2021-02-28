@@ -51,19 +51,20 @@ def finalize_job(entity, result):
     # update and return entity
     entity.exclude_from_indexes.add('results')
     entity['results'] = str(result)
+    entity['message'] = 'Success'
     entity['processed_timestamp'] = datetime.datetime.utcnow()
     entity['processed_version'] = os.environ.get('GAE_VERSION')
     return entity
 
 #def run(client: datastore.Client) -> str:
-def run(processor_id) -> str:
+def run(project_id, processor_id) -> str:
     """ pull unfinished, verified jobs and run them
     Returns: 
         string message with number of jobs run
     """
 
     # Connect to datastore
-    client = datastore.Client()
+    client = datastore.Client(project_id)
 
     # Initialize google cloud quantum engine
     engine = cirq.google.Engine(project_id=client.project)
@@ -73,7 +74,7 @@ def run(processor_id) -> str:
     device = engine.get_processor(processor_id=processor_id).get_device([cirq.google.SYC_GATESET])
 
     # get current error qubits from recent calibration
-    err_qubits = get_error_qubits(client.project, processor_id, 35)
+    err_qubits = get_error_qubits(client.project, processor_id, 45)
 
     # pull unfinished, verified job keys
     query = client.query(kind="job")
@@ -103,6 +104,7 @@ def run(processor_id) -> str:
 
 if __name__ == '__main__':
     # processor id from argument
-    PROCESSOR_ID = str(sys.argv[1])
+    PROJECT_ID = str(sys.argv[1])
+    PROCESSOR_ID = str(sys.argv[2])
 
-    print(run(PROCESSOR_ID))
+    print(run(PROJECT_ID, PROCESSOR_ID))

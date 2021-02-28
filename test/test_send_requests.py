@@ -16,6 +16,9 @@ circuit = cirq.Circuit(
 print(circuit)
 print(cirq.to_json(circuit))
 
-print(requests.post(root + "send", json={"circuit":cirq.to_json(circuit), "email":"test4", "repetitions":3, "student_id":1234, 'note':'test note'}).text)
-print(requests.post(root + "send", json={"circuit":cirq.to_json(circuit), "email":"test4", "repetitions":3, "student_id":1234}).text)
-print(requests.post(root + "send", json={"circuit":cirq.to_json(circuit), "email":"test4", "repetitions":3, "student_id":1234}).text)
+r = requests.post(root + "send", json={"circuit":cirq.to_json(circuit), "email":"test4", "repetitions":3, "student_id":1234, 'note':'test note'})
+print(r.text)
+r = requests.post(root + "send", json={"circuit":cirq.to_json(circuit), "email":"test4", "repetitions":3, "student_id":1234})
+print(r.text)
+r = requests.post(root + "send", json={"circuit":cirq.to_json(circuit), "email":"test4", "repetitions":3, "student_id":1234})
+print(r.text)

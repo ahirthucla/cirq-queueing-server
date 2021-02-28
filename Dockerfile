@@ -9,6 +9,8 @@ RUN virtualenv /env -p python3.7
 # source /env/bin/activate.
 ENV VIRTUAL_ENV /env
 ENV PATH /env/bin:$PATH
+ENV GOOGLE_CLOUD_PROJECT your_project_id
+ENV GOOGLE_CLOUD_PROCESSOR your_processor_id
 
 # Add the application source code.
 ADD . /app
