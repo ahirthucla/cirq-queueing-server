@@ -2,6 +2,14 @@ cron:
 - description: "regular verify"
   url: /verify
   schedule: every 5 minutes
-- description: "regular process"
-  url: /run
+- description: "regular result_check"
+  url: /collect
   schedule: every 5 minutes
+- description: "scheduled process"
+  url: /run
+  timezone: America/Los_Angeles
+  schedule: 5 of mar 08:01
+  retry_parameters:
+    job_age_limit: 1h
+    min_backoff_seconds: 300
+    max_backoff_seconds: 600

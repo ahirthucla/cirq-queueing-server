@@ -4,8 +4,66 @@ from flask import Flask
 import time
 import sys
 import datetime
-from cirq_multiplexer.multiplex import multiplex_onto_sycamore, get_error_qubits
 import os
+from networkx import Graph
+from itertools import combinations
+from cirq.contrib.routing import route_circuit
+
+def get_error_qubits(project_id, processor_id, threshold):
+
+    # query for the latest calibration
+    engine = cirq.google.Engine(project_id=project_id)
+    processor = engine.get_processor(processor_id=processor_id)
+    latest_calibration = processor.get_current_calibration()
+
+    err_qubits = set()
+    for metric_name in latest_calibration:
+        for qubit_or_pair in latest_calibration[metric_name]:
+            metric_value = latest_calibration[metric_name][qubit_or_pair]
+            # find the qubits that have higher error probability(above the threshold)
+            if metric_value[0] > threshold:
+                # get all the qubits in the tuple from a metric key
+                for q in qubit_or_pair:
+                    err_qubits.add(q)
+    return err_qubits
+
+def naive_connectivity(gridqubits):
+    # Workaround because I can't get connectivity directly from device object
+    return Graph((q1,q2) for q1,q2 in combinations(gridqubits, 2) if q1.is_adjacent(q2))
+
+def place_circuit(circuit, device, exclude_always):
+    if exclude_always is None:
+        exclude_always = set()
+    else:
+        exclude_always = set(exclude_always)
+
+    try:
+        return cirq.google.optimized_for_sycamore(circuit=circuit, new_device=device, optimizer_type='sycamore')
+    except ValueError as e:
+        pass
+
+    # Workaround to work with route_circuit, which unnecessarily doesn't support multi-qubit measures
+    def split_measure(measure_gate:'cirq.GateOperation') -> 'cirq.GateOperation':
+        if not cirq.protocols.is_measurement(measure_gate):
+            yield measure_gate
+            return
+        key = cirq.protocols.measurement_key(measure_gate)
+        yield cirq.Moment([cirq.measure(qubit, key=key+'.'+str(qubit)) for qubit in measure_gate.qubits])
+    circuit = cirq.Circuit(*map(split_measure, circuit.all_operations()))
+
+    available_qubits = device.qubit_set() - exclude_always
+    graph = naive_connectivity(available_qubits)
+
+    circuit = route_circuit(circuit=circuit, device_graph=graph, algo_name='greedy').circuit
+    circuit = cirq.google.optimized_for_sycamore(circuit=circuit, new_device=device, optimizer_type='sycamore')
+    print(sorted(circuit.all_qubits()))
+
+    # Workaround because SerializableDevice is not json-able
+    circuit = cirq.Circuit() + circuit
+
+    device.validate_circuit(circuit)
+
+    return circuit
 
 def prepare_job(entity: 'datastore.Entity', device, err_qubits) -> 'datastore.Entity':
     """ Run job on one of available handlers and update entity
@@ -16,10 +74,7 @@ def prepare_job(entity: 'datastore.Entity', device, err_qubits) -> 'datastore.En
     """
 
     # ensure only running unfinished jobs
-    assert not entity['done']
-
-    # mark entity as done
-    entity['done'] = True
+    assert not entity['done'] and not entity['sent']
 
     # parse circuit
     # This could be done in the verifier, and we could pickle load the circuit here
@@ -27,15 +82,21 @@ def prepare_job(entity: 'datastore.Entity', device, err_qubits) -> 'datastore.En
     try:
         circuit = cirq.read_json(json_text=entity['circuit'])
     except Exception as e:
-        entity['message'] = 'Exception observed while converting JSON to circuit:\n' + str(e) + '\n' + \
+        entity['message'] = 'Exception observed while converting JSON to circuit:\n' + str(type(e)) + str(e) + '\n' + \
                             'With JSON:\n' + str(entity['circuit'])
+        entity['done'] = True
         return entity, None, None
 
     # conditionally map circuit
     try:
-        circuit, _ = next(multiplex_onto_sycamore([circuit], device, exclude_always=err_qubits))
+        #circuit, _ = next(multiplex_onto_sycamore([circuit], device, exclude_always=err_qubits))
+        circuit = place_circuit(circuit, device, err_qubits)
     except Exception as e:
-        entity['message'] = 'Exception observed while mapping circuit:\n' + str(e)
+        entity['message'] = 'Exception observed while mapping circuit:\n' + str(type(e)) + str(e)
+        entity['done'] = True
+        print(circuit.all_qubits())
+        print(circuit)
+        raise e
         return entity, None, None
 
     entity.exclude_from_indexes.add('mapped_circuit')
@@ -44,16 +105,18 @@ def prepare_job(entity: 'datastore.Entity', device, err_qubits) -> 'datastore.En
     return entity, circuit, entity['repetitions']
 
 def run_jobs(handler, circuits, repetitions):
-    for result in handler.run_batch(circuits, repetitions=repetitions):
-        yield str(result[0])
+    circuits = list(circuits)
+    enginejob = handler._engine.run_batch(circuits, repetitions=max(repetitions), processor_ids=handler._processor_ids, gate_set=handler._gate_set)
+    yield from ((enginejob.program_id, enginejob.job_id, i) for i in range(len(circuits)))
 
-def finalize_job(entity, result):
+def finalize_job(entity, result_key):
     # update and return entity
     entity.exclude_from_indexes.add('results')
-    entity['results'] = str(result)
+    entity['result_key'] = result_key
     entity['message'] = 'Success'
     entity['processed_timestamp'] = datetime.datetime.utcnow()
     entity['processed_version'] = os.environ.get('GAE_VERSION')
+    entity['sent'] = True
     return entity
 
 #def run(client: datastore.Client) -> str:
@@ -74,16 +137,21 @@ def run(project_id, processor_id) -> str:
     device = engine.get_processor(processor_id=processor_id).get_device([cirq.google.SYC_GATESET])
 
     # get current error qubits from recent calibration
-    err_qubits = get_error_qubits(client.project, processor_id, 45)
+    err_qubits = get_error_qubits(client.project, processor_id, 35)
 
     # pull unfinished, verified job keys
     query = client.query(kind="job")
     query.add_filter("done", "=", False)
+    query.add_filter("sent", "=", False)
     query.add_filter("verified", "=", True)
 
-    # get each job by key and run it in a transaction
-    with client.transaction():
-        prepared = [prepare_job(entity, device, err_qubits) for entity in query.fetch()]
+    while True:
+        # get each job by key and run it in a transaction
+        transaction = client.transaction()
+        transaction.begin(timeout=600)
+
+        prepared = [prepare_job(entity, device, err_qubits) for entity in query.fetch(limit=20)]
+        if not prepared: break
 
         to_run, complete = [],[]
         for entity, circuit, repetitions in prepared:
@@ -95,9 +163,14 @@ def run(project_id, processor_id) -> str:
 
         if to_run:
             entities, circuits, repetitions = zip(*to_run)
-            results = run_jobs(handler, circuits, list(repetitions))
-            complete.extend(map(finalize_job, entities, results))
-        client.put_multi(complete)
+            result_keys = run_jobs(handler, circuits, list(repetitions))
+            complete.extend(map(finalize_job, entities, result_keys))
+
+        #client.put_multi(complete)
+        for entity in complete:
+            transaction.put(entity)
+
+        transaction.commit()
 
     # return number of jobs run
     return 'Jobs run: '+str(len(prepared))

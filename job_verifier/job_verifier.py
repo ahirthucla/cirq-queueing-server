@@ -22,7 +22,7 @@ def verify_job(entity: 'Entity', max_qubits: int = 16, max_ops: int = 120, max_r
     """
 
     # ensure only correct jobs are being pulled
-    assert not entity['done'] and not entity['verified']
+    assert not entity['done'] and not entity['verified'] and not entity['sent']
 
     # record verification timestamp
     entity['verified_timestamp'] = datetime.datetime.utcnow()
@@ -35,7 +35,7 @@ def verify_job(entity: 'Entity', max_qubits: int = 16, max_ops: int = 120, max_r
     except Exception as e:
         message = 'Error converting JSON to circuit:\n' +\
                             'Exception Observed:\n'+\
-                            str(e)+'\n'+\
+                            str(type(e)) + str(e)+'\n'+\
                             'With JSON'+\
                             str(entity['circuit'])
         entity['verified'] = False
@@ -85,7 +85,6 @@ def verify_all(project_id:str, processor_id: str) -> str:
     # pull unfinished, unverified job keys
     query = client.query(kind="job")
     query.keys_only()
-    query.add_filter("done", "=", False)
     query.add_filter("verified", "=", False)
     keys = list(query.fetch())
 

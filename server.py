@@ -2,8 +2,9 @@ from typing import Dict, Iterable, Union
 from flask import Flask, request
 from google.cloud import datastore
 import datetime
-from job_processor.job_processor import run as run_jobs
 from job_verifier.job_verifier import verify_all
+from job_processor.job_processor import run as run_jobs
+from job_processor.collect_results import collect_results
 import os
 import json
 
@@ -160,6 +161,12 @@ def run():
     if not request.headers.get('X-Appengine-Cron'):
       return "Not Authorized", 401
     return run_jobs(PROJECT_ID, PROCESSOR_ID)
+
+@app.route('/collect', methods=['GET'])
+def collect():
+    if not request.headers.get('X-Appengine-Cron'):
+      return "Not Authorized", 401
+    return collect_results(PROJECT_ID, PROCESSOR_ID)
 
 @app.route('/')
 def root() -> str:

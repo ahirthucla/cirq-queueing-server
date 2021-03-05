@@ -21,4 +21,4 @@ RUN pip install /app/quantum_circuit_multiplexers
 
 # Run a WSGI server to serve the application. gunicorn must be declared as
 # a dependency in requirements.txt.
-CMD gunicorn -b :$PORT server:app
+CMD gunicorn -b :$PORT server:app --timeout 600
