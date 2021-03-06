@@ -43,6 +43,7 @@ def store_job(data: Dict[str,str], client: datastore.Client) -> int:
     entity['submission_version'] = os.environ.get('GAE_VERSION')
     entity['verified'] = False
     entity['done'] = False
+    entity['sent'] = False
 
     # store entity
     client.put(entity)

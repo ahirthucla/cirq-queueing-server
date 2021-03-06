@@ -68,6 +68,7 @@ def verify_job(entity: 'Entity', max_qubits: int = 16, max_ops: int = 120, max_r
 
     # update and return valid circuit
     entity['verified'] = True
+    entity['done'] = False
     entity['message'] = 'Verified'
     return entity
 
@@ -86,6 +87,7 @@ def verify_all(project_id:str, processor_id: str) -> str:
     query = client.query(kind="job")
     query.keys_only()
     query.add_filter("verified", "=", False)
+    query.add_filter("done", "=", False)
     keys = list(query.fetch())
 
     # get each job by key and verify it in a transaction

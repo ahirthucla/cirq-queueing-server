@@ -56,7 +56,6 @@ def place_circuit(circuit, device, exclude_always):
 
     circuit = route_circuit(circuit=circuit, device_graph=graph, algo_name='greedy').circuit
     circuit = cirq.google.optimized_for_sycamore(circuit=circuit, new_device=device, optimizer_type='sycamore')
-    print(sorted(circuit.all_qubits()))
 
     # Workaround because SerializableDevice is not json-able
     circuit = cirq.Circuit() + circuit
@@ -94,9 +93,6 @@ def prepare_job(entity: 'datastore.Entity', device, err_qubits) -> 'datastore.En
     except Exception as e:
         entity['message'] = 'Exception observed while mapping circuit:\n' + str(type(e)) + str(e)
         entity['done'] = True
-        print(circuit.all_qubits())
-        print(circuit)
-        raise e
         return entity, None, None
 
     entity.exclude_from_indexes.add('mapped_circuit')
@@ -107,7 +103,7 @@ def prepare_job(entity: 'datastore.Entity', device, err_qubits) -> 'datastore.En
 def run_jobs(handler, circuits, repetitions):
     circuits = list(circuits)
     enginejob = handler._engine.run_batch(circuits, repetitions=max(repetitions), processor_ids=handler._processor_ids, gate_set=handler._gate_set)
-    yield from ((enginejob.program_id, enginejob.job_id, i) for i in range(len(circuits)))
+    yield from ([enginejob.program_id, enginejob.job_id, i] for i in range(len(circuits)))
 
 def finalize_job(entity, result_key):
     # update and return entity
