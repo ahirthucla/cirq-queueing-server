@@ -19,7 +19,7 @@ client = datastore.Client(project=PROJECT_ID)
 app = Flask(__name__)
 
 # available fields and their defaults. None if the field is required
-fields = {'circuit':None, 'email':None, 'repetitions':None, 'student_id':None, 'note':'Your Note Here'}
+fields = {'circuit':'', 'email':'', 'repetitions':0, 'student_id':0, 'note':'Your Note Here'}
 
 def store_job(data: Dict[str,str], client: datastore.Client) -> int:
     """ Stores job datastore 
@@ -35,9 +35,25 @@ def store_job(data: Dict[str,str], client: datastore.Client) -> int:
     entity = datastore.Entity(key=key, exclude_from_indexes=['note', 'circuit', 'repetitions'])
 
     # fill entity fields
-    for field, default in fields.items():
-        value = data.get(field)
-        entity[field] = value if value else default
+    #for field, default in fields.items():
+    #    value = data.get(field)
+    #    entity[field] = value if value else default
+    circuit = str(data.get('circuit'))
+    entity['circuit'] = circuit
+    email = str(data.get('email'))
+    entity['email'] = email
+    note = str(data.get('note'))
+    entity['note'] = note
+    try:
+        repetitions = int(data.get('repetitions'))
+    except ValueError as e:
+        raise ValueError('repetitions is not a valid integer')
+    entity['repetitions'] = repetitions
+    try:
+        student_id = int(data.get('student_id'))
+    except ValueError as e:
+        raise ValueError('repetitions is not a valid integer')
+    entity['student_id'] = student_id
 
     entity['submission_timestamp'] = datetime.datetime.utcnow()
     entity['submission_version'] = os.environ.get('GAE_VERSION')
@@ -46,7 +62,8 @@ def store_job(data: Dict[str,str], client: datastore.Client) -> int:
     entity['sent'] = False
 
     # store entity
-    client.put(entity)
+    with client.transaction():
+        client.put(entity)
 
     # return entity key
     return entity.key
@@ -65,7 +82,8 @@ def fetch_by_job(job_ids: Iterable[int], client: datastore.Client) -> Dict[int, 
     keys = [client.key('job', int(job_id)) for job_id in job_ids]
 
     # query for all entities simultaneously
-    entities = client.get_multi(keys)
+    with client.transaction(read_only=True):
+        entities = client.get_multi(keys)
 
     # index entities by their identifier, turn into json-able dict, and return
     results = {entity.id: entity for entity in entities}
@@ -87,7 +105,8 @@ def fetch_by_student(student_ids: Iterable[int], client: datastore.Client) -> Di
         query = client.query(kind="job")
         query.add_filter("student_id", "=", int(student_id))
         # query for entities
-        entities = query.fetch()
+        with client.transaction(read_only=True):
+            entities = query.fetch()
         results[student_id] = {entity.id: entity for entity in entities}
     
     return results
@@ -144,7 +163,10 @@ def send() -> str:
             return failure_string
 
         # store job from json
-        job_id = store_job(request.json, client).id
+        try:
+            job_id = store_job(request.json, client).id
+        except Exception as e:
+            return 'Exception Observed: ' + str(type(e)) + ':' + str(e)
 
         # return job id
         return "Job Stored with ID: " + str(job_id)

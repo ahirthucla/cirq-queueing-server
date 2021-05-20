@@ -10,7 +10,7 @@ import os
 if TYPE_CHECKING:
     from google.cloud.datastore import Entity
 
-def verify_job(entity: 'Entity', max_qubits: int = 16, max_ops: int = 120, max_reps: int = 100) -> 'Entity':
+def verify_job(entity: 'Entity', max_qubits: int = 12, max_ops: int = 200, max_reps: int = 10000) -> 'Entity':
     """ Verify that a job satisfies max count constraints, passes a manual check, and is valid for the device
     Args: 
         entity: unfinished, unverified job 
@@ -22,7 +22,7 @@ def verify_job(entity: 'Entity', max_qubits: int = 16, max_ops: int = 120, max_r
     """
 
     # ensure only correct jobs are being pulled
-    assert not entity['done'] and not entity['verified'] and not entity['sent']
+    assert not entity['done'] and not entity['verified']
 
     # record verification timestamp
     entity['verified_timestamp'] = datetime.datetime.utcnow()
@@ -31,20 +31,24 @@ def verify_job(entity: 'Entity', max_qubits: int = 16, max_ops: int = 120, max_r
 
     # parse circuit from json, checking for illegal json circuit
     try:
-        circuit = cirq.read_json(json_text=entity['circuit'])
+        circuit = cirq.read_json(json_text=str(entity['circuit']))
+        assert circuit, 'circuit is not null'
+        assert isinstance(circuit, cirq.Circuit), 'json did not parse into a valid circuit'
     except Exception as e:
         message = 'Error converting JSON to circuit:\n' +\
                             'Exception Observed:\n'+\
-                            str(type(e)) + str(e)+'\n'+\
-                            'With JSON'+\
-                            str(entity['circuit'])
+                            str(type(e)) + str(e)+'\n'
         entity['verified'] = False
         entity['done'] = True
         entity['message'] = message
         return entity
     
-    # check for too many qubits
     message = ''
+    mkeys = circuit.all_measurement_keys()
+    if len(mkeys) != len(set(mkeys)):
+        message += 'Circuit used duplicate measurement keys\n'
+
+    # check for too many qubits
     qubit_count = sum(1 for _ in circuit.all_qubits())
     if qubit_count > max_qubits: 
         message += 'Circuit uses too many qubits: ' + str(qubit_count) + '>' + str(max_qubits) + '\n'
@@ -59,6 +63,9 @@ def verify_job(entity: 'Entity', max_qubits: int = 16, max_ops: int = 120, max_r
     if rep_count > max_reps:
         message += 'Circuit is repeated too many times: ' + str(rep_count) + '>' + str(max_reps) + '\n'
 
+    if not circuit.has_measurements():
+        message += 'Circuit measures no qubits' + '\n'
+
     # save error message and exit
     if message:
         entity['verified'] = False
@@ -67,8 +74,12 @@ def verify_job(entity: 'Entity', max_qubits: int = 16, max_ops: int = 120, max_r
         return entity
 
     # update and return valid circuit
+    entity['qubit_count'] = qubit_count
+    entity['op_count'] = op_count
+    entity['rep_count'] = rep_count
     entity['verified'] = True
     entity['done'] = False
+    entity['batchable'] = True
     entity['message'] = 'Verified'
     return entity
 
@@ -88,7 +99,8 @@ def verify_all(project_id:str, processor_id: str) -> str:
     query.keys_only()
     query.add_filter("verified", "=", False)
     query.add_filter("done", "=", False)
-    keys = list(query.fetch())
+    with client.transaction(read_only=True):
+        keys = list(query.fetch())
 
     # get each job by key and verify it in a transaction
     for key in keys:

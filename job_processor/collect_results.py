@@ -8,12 +8,26 @@ import os
 from networkx import Graph
 from itertools import combinations
 from cirq.contrib.routing import route_circuit
+import json
 
 def fill_result(entity, engine):
-    program_id, job_id, index = entity['result_key']
+    try:
+        program_id, job_id, index = entity['result_key']
+    except KeyError:
+        return entity
     enginejob = engine.get_program(program_id).get_job(job_id)
+    if enginejob.status() == 'FAILURE':
+        if enginejob.failure()[0] == 'INVALID_PROGRAM' and entity.get('batchable') != False:
+            entity['done'] = False
+            entity['sent'] = False
+            entity['batchable'] = False
+        else:
+            entity['done'] = True
+            entity['message'] = str(enginejob.failure())
+        return entity
     if enginejob.status() != 'SUCCESS': return entity
-    entity['result'] = enginejob.batched_results()[index][0].data.to_json()
+    entity.exclude_from_indexes.add('result')
+    entity['result'] = str(enginejob.batched_results()[index][0])
     entity['done'] = True
     return entity
 
@@ -28,8 +42,8 @@ def collect_results(project_id, processor_id) -> str:
     # pull unfinished, verified job keys
     query = client.query(kind="job")
     query.keys_only()
-    query.add_filter("done", "=", False)
     query.add_filter("sent", "=", True)
+    query.add_filter("done", "=", False)
 
     count = 0
     for key in query.fetch():
@@ -37,7 +51,7 @@ def collect_results(project_id, processor_id) -> str:
             entity = client.get(key.key)
             entity = fill_result(entity, engine)
             client.put(entity)
-        count += 1
+            count += 1
 
     # return number of jobs run
     return 'Results updated: '+str(count)

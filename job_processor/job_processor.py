@@ -37,19 +37,22 @@ def place_circuit(circuit, device, exclude_always):
     else:
         exclude_always = set(exclude_always)
 
-    try:
-        return cirq.google.optimized_for_sycamore(circuit=circuit, new_device=device, optimizer_type='sycamore')
-    except ValueError as e:
-        pass
-
     # Workaround to work with route_circuit, which unnecessarily doesn't support multi-qubit measures
     def split_measure(measure_gate:'cirq.GateOperation') -> 'cirq.GateOperation':
         if not cirq.protocols.is_measurement(measure_gate):
             yield measure_gate
             return
         key = cirq.protocols.measurement_key(measure_gate)
-        yield cirq.Moment([cirq.measure(qubit, key=key+'.'+str(qubit)) for qubit in measure_gate.qubits])
+        yield cirq.Moment([cirq.measure(qubit, key=str(key)+'.'+str(qubit) + '.' + str(datetime.datetime.utcnow()))  for qubit in measure_gate.qubits])
     circuit = cirq.Circuit(*map(split_measure, circuit.all_operations()))
+    mkeys = circuit.all_measurement_keys()
+    assert len(mkeys) == len(set(mkeys)), 'measure err'
+
+    try:
+        return cirq.google.optimized_for_sycamore(circuit=circuit, new_device=device, optimizer_type='sycamore')
+    except ValueError as e:
+        pass
+
 
     available_qubits = device.qubit_set() - exclude_always
     graph = naive_connectivity(available_qubits)
@@ -73,7 +76,7 @@ def prepare_job(entity: 'datastore.Entity', device, err_qubits) -> 'datastore.En
     """
 
     # ensure only running unfinished jobs
-    assert not entity['done'] and not entity['sent']
+    assert not entity['done']
 
     # parse circuit
     # This could be done in the verifier, and we could pickle load the circuit here
@@ -95,8 +98,18 @@ def prepare_job(entity: 'datastore.Entity', device, err_qubits) -> 'datastore.En
         entity['done'] = True
         return entity, None, None
 
+    assert len(circuit.all_measurement_keys()) == len(set(circuit.all_measurement_keys())), entity['email']
+
+    if not circuit.has_measurements():
+        entity['message'] = 'Exception observed while processing: Circuit has no measurements'
+        entity['done'] = True
+        return entity, None, None
+
     entity.exclude_from_indexes.add('mapped_circuit')
+    circuit = cirq.Circuit(circuit.all_operations())
     entity['mapped_circuit'] = cirq.to_json(circuit)
+    entity['mapped_depth'] = len(circuit)
+    entity['mapped_opcount'] = sum(1 for _ in circuit.all_operations())
 
     return entity, circuit, entity['repetitions']
 
@@ -107,7 +120,6 @@ def run_jobs(handler, circuits, repetitions):
 
 def finalize_job(entity, result_key):
     # update and return entity
-    entity.exclude_from_indexes.add('results')
     entity['result_key'] = result_key
     entity['message'] = 'Success'
     entity['processed_timestamp'] = datetime.datetime.utcnow()
@@ -137,39 +149,54 @@ def run(project_id, processor_id) -> str:
 
     # pull unfinished, verified job keys
     query = client.query(kind="job")
-    query.add_filter("done", "=", False)
-    query.add_filter("sent", "=", False)
     query.add_filter("verified", "=", True)
+    query.add_filter("sent", "=", False)
+    query.add_filter("done", "=", False)
 
+    num_checked, num_run = 0, 0
     while True:
         # get each job by key and run it in a transaction
-        transaction = client.transaction()
-        transaction.begin(timeout=600)
+        with client.transaction():
+            entities = list(query.fetch(limit=25))
+            for entity in entities:
+                entity['sent'] = True
+                client.put(entity)
 
-        prepared = [prepare_job(entity, device, err_qubits) for entity in query.fetch(limit=20)]
+        prepared = [prepare_job(entity, device, err_qubits) for entity in entities]
+        num_checked += len(prepared)
+
         if not prepared: break
 
-        to_run, complete = [],[]
+        to_run, complete, individuals = [],[],[]
         for entity, circuit, repetitions in prepared:
             if circuit and repetitions:
-                to_run.append((entity, circuit, repetitions))
+                if entity.get('batchable') != False:
+                    to_run.append((entity, circuit, repetitions))
+                else:
+                    individuals.append((entity, circuit, repetitions))
             else:
                 complete.append(entity)
-        assert len(to_run) + len(complete) == len(prepared)
+        assert len(to_run) + len(complete) + len(individuals)== len(prepared)
 
         if to_run:
             entities, circuits, repetitions = zip(*to_run)
             result_keys = run_jobs(handler, circuits, list(repetitions))
+            num_run += len(to_run)
             complete.extend(map(finalize_job, entities, result_keys))
 
-        #client.put_multi(complete)
-        for entity in complete:
-            transaction.put(entity)
+        for entity, circuit, repetition in individuals:
+            result_keys = run_jobs(handler, [circuit], [repetition])
+            num_run += 1
+            complete.append(finalize_job(entity, next(result_keys)))
+            #print(entity['sent'])
 
-        transaction.commit()
+        with client.transaction():
+            for entity in complete:
+                client.put(entity)
+
 
     # return number of jobs run
-    return 'Jobs run: '+str(len(prepared))
+    return 'Jobs run: '+str(num_run)+'/'+str(num_checked)
 
 if __name__ == '__main__':
     # processor id from argument

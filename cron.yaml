@@ -5,11 +5,26 @@ cron:
 - description: "regular result_check"
   url: /collect
   schedule: every 5 minutes
-- description: "scheduled process"
+- description: "regular run"
   url: /run
-  timezone: America/Los_Angeles
-  schedule: 5 of mar 08:01
+  schedule: every 15 minutes
   retry_parameters:
     job_age_limit: 1h
-    min_backoff_seconds: 300
-    max_backoff_seconds: 600
+    min_backoff_seconds: 600
+    max_backoff_seconds: 900
+- description: "scheduled process on hour"
+  url: /run
+  timezone: America/Los_Angeles
+  schedule: 21 of mar 12:50
+  retry_parameters:
+    job_age_limit: 1h
+    min_backoff_seconds: 600
+    max_backoff_seconds: 900
+- description: "scheduled process on 30"
+  url: /run
+  timezone: America/Los_Angeles
+  schedule: 21 of mar 13:05
+  retry_parameters:
+    job_age_limit: 1h
+    min_backoff_seconds: 600
+    max_backoff_seconds: 900
